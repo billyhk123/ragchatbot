@@ -1,0 +1,26 @@
+# secrets
+.env
+*.env
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.envrc
+.ipynb_checkpoints/
+
+# build
+dist/
+build/
+*.egg-info/
+
+# local data / indexes
+data/raw/
+vectordb/
+*.faiss
+*.pkl
+
+# OS
+.DS_Store
+Thumbs.db
