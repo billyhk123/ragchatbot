@@ -4,7 +4,11 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 
-COPY pyproject.toml .
+COPY pyproject.toml README.md ./
+COPY app ./app
+COPY ingest ./ingest
+COPY server ./server
+COPY scripts ./scripts
 RUN pip install --no-cache-dir .
 
 COPY . .
