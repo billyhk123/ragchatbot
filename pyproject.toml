@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragchatbot"
+version = "0.1.0"
+description = "RAG chatbot with WhatsApp webhook"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "requests",
+  "python-dotenv",
+  "pydantic",
+  "langchain-core",
+  "langchain-community",
+  "fastapi-poe",
+  "faiss-cpu",
+  "sentence-transformers",
+]
+
+[tool.setuptools]
+packages = ["app", "ingest", "server", "scripts"]

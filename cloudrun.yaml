@@ -1,0 +1,37 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ragchatbot
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containers:
+        - image: gcr.io/PROJECT_ID/IMAGE:TAG
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: WHATSAPP_VERIFY_TOKEN
+              value: "SET_IN_CLOUD_RUN"
+            - name: WHATSAPP_ACCESS_TOKEN
+              value: "SET_IN_CLOUD_RUN"
+            - name: WHATSAPP_PHONE_NUMBER_ID
+              value: "SET_IN_CLOUD_RUN"
+            - name: WHATSAPP_GRAPH_URL
+              value: "https://graph.facebook.com/v21.0"
+            - name: POE_API_KEY
+              value: "SET_IN_CLOUD_RUN"
+            - name: POE_BOT_NAME
+              value: "GPT-3.5-Turbo"
+            - name: EMBEDDING_MODEL
+              value: "sentence-transformers/all-MiniLM-L6-v2"
+            - name: PERSIST_DIR
+              value: "vectordb"
+            - name: TEMPERATURE
+              value: "0.2"
+            - name: MAX_TOKENS
+              value: "700"
