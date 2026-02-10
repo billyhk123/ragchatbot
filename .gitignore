@@ -15,11 +15,7 @@ dist/
 build/
 *.egg-info/
 
-# local data / indexes
-data/raw/
-vectordb/
-*.faiss
-*.pkl
+
 
 # OS
 .DS_Store
