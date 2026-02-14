@@ -1,7 +1,7 @@
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 
 from app.settings import settings
 from app.prompts import RAG_PROMPT
@@ -32,8 +32,9 @@ def build_chain():
 
     chain = (
         {
-            "question": RunnablePassthrough(),
-            "context": retriever | format_docs,
+            "question": RunnableLambda(lambda x: x["question"]),
+            "memory": RunnableLambda(lambda x: x.get("memory", "")),
+            "context": RunnableLambda(lambda x: x["question"]) | retriever | format_docs,
         }
         | RAG_PROMPT
         | llm

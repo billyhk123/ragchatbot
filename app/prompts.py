@@ -7,6 +7,7 @@ RAG_PROMPT = ChatPromptTemplate.from_messages([
      "Always provide citations like [source]."),
     ("human",
      "Question:\n{question}\n\n"
-     "Context:\n{context}\n\n"
+     "Conversation memory:\n{memory}\n\n"
+     "Retrieved context:\n{context}\n\n"
      "Answer with citations:"),
 ])

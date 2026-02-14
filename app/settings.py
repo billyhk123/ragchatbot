@@ -17,4 +17,11 @@ class Settings(BaseModel):
     temperature: float = float(os.getenv("TEMPERATURE", "0.2"))
     max_tokens: int = int(os.getenv("MAX_TOKENS", "700"))
 
+    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "")
+    firestore_prefix: str = os.getenv("FIRESTORE_PREFIX", "")
+
+    memory_window_turns: int = int(os.getenv("MEMORY_WINDOW_TURNS", "6"))
+    memory_recall_k: int = int(os.getenv("MEMORY_RECALL_K", "4"))
+    memory_vector_limit: int = int(os.getenv("MEMORY_VECTOR_LIMIT", "200"))
+
 settings = Settings()

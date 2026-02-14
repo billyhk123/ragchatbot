@@ -4,11 +4,13 @@ from fastapi import FastAPI, Request, Response, HTTPException, Query
 from pydantic import BaseModel
 
 from app.chain import build_chain
+from app.memory import ChatMemory
 
 app = FastAPI()
 
 # Build once at startup (important for performance on Cloud Run)
 chain = build_chain()
+memory = ChatMemory()
 
 VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
 ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
@@ -48,8 +50,11 @@ def send_whatsapp_text(to: str, text: str) -> None:
 
 def rag_answer(user_text: str, user_id: str) -> str:
     # Keep this wrapper: WhatsApp/channel code should never know about Poe/OpenAI/etc.
-    # Single-turn:
-    return chain.invoke(user_text)
+    recall = memory.build_context(user_id, user_text)
+    memory_context = memory.format_context(recall)
+    answer = chain.invoke({"question": user_text, "memory": memory_context})
+    memory.update_after_turn(user_id, user_text, answer)
+    return answer
 
 
 @app.get("/health")

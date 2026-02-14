@@ -35,3 +35,13 @@ spec:
               value: "0.2"
             - name: MAX_TOKENS
               value: "700"
+            - name: FIREBASE_PROJECT_ID
+              value: "SET_IN_CLOUD_RUN"
+            - name: FIRESTORE_PREFIX
+              value: ""
+            - name: MEMORY_WINDOW_TURNS
+              value: "6"
+            - name: MEMORY_RECALL_K
+              value: "4"
+            - name: MEMORY_VECTOR_LIMIT
+              value: "200"
