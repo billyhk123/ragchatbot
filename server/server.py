@@ -1,6 +1,7 @@
 import os
 import requests
 from fastapi import FastAPI, Request, Response, HTTPException, Query
+from pydantic import BaseModel
 
 from app.chain import build_chain
 
@@ -13,6 +14,15 @@ VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
 ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
 PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
 GRAPH_URL = os.environ.get("WHATSAPP_GRAPH_URL", "https://graph.facebook.com/v21.0")
+
+
+class ChatRequest(BaseModel):
+    question: str
+    user_id: str | None = None
+
+
+class ChatResponse(BaseModel):
+    answer: str
 
 
 def send_whatsapp_text(to: str, text: str) -> None:
@@ -45,6 +55,12 @@ def rag_answer(user_text: str, user_id: str) -> str:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(request: ChatRequest):
+    answer = rag_answer(request.question, request.user_id or "web")
+    return ChatResponse(answer=answer)
 
 
 @app.get("/webhook")
