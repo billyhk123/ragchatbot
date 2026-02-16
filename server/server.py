@@ -1,6 +1,9 @@
 import os
 import requests
+from pathlib import Path
+
 from fastapi import FastAPI, Request, Response, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.chain import build_chain
@@ -61,6 +64,12 @@ def rag_answer(user_text: str, user_id: str) -> str:
 def health():
     return {"status": "ok"}
 
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_policy():
+    policy_path = Path(__file__).with_name("privacy.html")
+    html = policy_path.read_text(encoding="utf-8")
+    return HTMLResponse(content=html)
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
