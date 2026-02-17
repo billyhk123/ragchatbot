@@ -71,6 +71,14 @@ def privacy_policy():
     html = policy_path.read_text(encoding="utf-8")
     return HTMLResponse(content=html)
 
+
+@app.get("/data-deletion", response_class=HTMLResponse)
+def data_deletion():
+    policy_path = Path(__file__).with_name("data_deletion.html")
+    html = policy_path.read_text(encoding="utf-8")
+    return HTMLResponse(content=html)
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     answer = rag_answer(request.question, request.user_id or "web")
