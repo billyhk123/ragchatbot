@@ -72,6 +72,13 @@ def privacy_policy():
     return HTMLResponse(content=html)
 
 
+@app.get("/chat-ui", response_class=HTMLResponse)
+def chat_ui():
+    ui_path = Path(__file__).with_name("chat_ui.html")
+    html = ui_path.read_text(encoding="utf-8")
+    return HTMLResponse(content=html)
+
+
 @app.get("/data-deletion", response_class=HTMLResponse)
 def data_deletion():
     policy_path = Path(__file__).with_name("data_deletion.html")

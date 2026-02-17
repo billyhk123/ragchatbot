@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ragchatbot Web Chat</title>
+    <style>
+      :root {
+        --wa-green: #25d366;
+        --wa-dark: #075e54;
+        --wa-light: #dcf8c6;
+        --wa-bg: #e5ddd5;
+        --wa-incoming: #ffffff;
+        --text: #111;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: var(--wa-bg);
+        color: var(--text);
+      }
+
+      .header {
+        background: var(--wa-dark);
+        color: #fff;
+        padding: 12px 16px;
+        font-weight: bold;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      .card {
+        background: #f0f0f0;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+
+      button {
+        background: var(--wa-green);
+        color: #fff;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .chat {
+        background: var(--wa-bg);
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 360px;
+        max-height: 65vh;
+        overflow-y: auto;
+      }
+
+      .bubble {
+        max-width: 75%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        margin: 8px 0;
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+
+      .bubble.user {
+        margin-left: auto;
+        background: var(--wa-light);
+      }
+
+      .bubble.bot {
+        margin-right: auto;
+        background: var(--wa-incoming);
+      }
+
+      .footer {
+        margin-top: 12px;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #555;
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">ragchatbot Web Chat</div>
+    <div class="container">
+      <div class="card">
+        <div class="row">
+          <label for="phone" style="min-width: 120px;">Phone number</label>
+          <input id="phone" type="text" placeholder="e.g. 85291234567">
+        </div>
+        <div class="hint">Used as session ID: web:&lt;phone&gt;</div>
+      </div>
+
+      <div class="chat" id="chat"></div>
+
+      <div class="footer card">
+        <div class="row">
+          <input id="message" type="text" placeholder="Type a message...">
+          <button id="send">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const chatEl = document.getElementById("chat");
+      const phoneEl = document.getElementById("phone");
+      const messageEl = document.getElementById("message");
+      const sendBtn = document.getElementById("send");
+
+      function addBubble(text, role) {
+        const div = document.createElement("div");
+        div.className = "bubble " + role;
+        div.textContent = text;
+        chatEl.appendChild(div);
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+
+      async function sendMessage() {
+        const phone = phoneEl.value.trim();
+        const message = messageEl.value.trim();
+        if (!phone || !message) {
+          return;
+        }
+
+        addBubble(message, "user");
+        messageEl.value = "";
+        sendBtn.disabled = true;
+
+        try {
+          const resp = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              question: message,
+              user_id: "web:" + phone
+            }),
+          });
+
+          if (!resp.ok) {
+            const text = await resp.text();
+            addBubble("Error: " + text, "bot");
+            return;
+          }
+
+          const data = await resp.json();
+          addBubble(data.answer || "(empty response)", "bot");
+        } catch (err) {
+          addBubble("Error: " + err, "bot");
+        } finally {
+          sendBtn.disabled = false;
+          messageEl.focus();
+        }
+      }
+
+      sendBtn.addEventListener("click", sendMessage);
+      messageEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          sendMessage();
+        }
+      });
+    </script>
+  </body>
+</html>
