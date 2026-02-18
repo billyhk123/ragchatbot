@@ -1,0 +1,15 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - pathway_service/Dockerfile
+      - -t
+      - gcr.io/$PROJECT_ID/pathway-retriever:$COMMIT_SHA
+      - .
+
+images:
+  - gcr.io/$PROJECT_ID/pathway-retriever:$COMMIT_SHA

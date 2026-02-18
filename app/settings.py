@@ -24,4 +24,8 @@ class Settings(BaseModel):
     memory_recall_k: int = int(os.getenv("MEMORY_RECALL_K", "4"))
     memory_vector_limit: int = int(os.getenv("MEMORY_VECTOR_LIMIT", "200"))
 
+    pathway_url: str = os.getenv("PATHWAY_URL", "")
+    pathway_host: str = os.getenv("PATHWAY_HOST", "")
+    pathway_port: int = int(os.getenv("PATHWAY_PORT", "0"))
+
 settings = Settings()

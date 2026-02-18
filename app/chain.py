@@ -1,5 +1,5 @@
-from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS, PathwayVectorClient
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 
@@ -20,13 +20,21 @@ def format_docs(docs):
 
 
 def build_chain():
-    embeddings = HuggingFaceEmbeddings(model_name=settings.embedding_model)
-    db = FAISS.load_local(
-        settings.persist_dir,
-        embeddings,
-        allow_dangerous_deserialization=True,
-    )
-    retriever = db.as_retriever(search_kwargs={"k": 4})
+    if settings.pathway_url or settings.pathway_host:
+        client = PathwayVectorClient(
+            url=settings.pathway_url or None,
+            host=settings.pathway_host or None,
+            port=settings.pathway_port or None,
+        )
+        retriever = client.as_retriever(search_kwargs={"k": 4})
+    else:
+        embeddings = HuggingFaceEmbeddings(model_name=settings.embedding_model)
+        db = FAISS.load_local(
+            settings.persist_dir,
+            embeddings,
+            allow_dangerous_deserialization=True,
+        )
+        retriever = db.as_retriever(search_kwargs={"k": 4})
 
     llm = PoeChatModel()
 

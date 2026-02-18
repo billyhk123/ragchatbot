@@ -45,3 +45,9 @@ spec:
               value: "4"
             - name: MEMORY_VECTOR_LIMIT
               value: "200"
+            - name: PATHWAY_URL
+              value: "SET_IN_CLOUD_RUN"
+            - name: PATHWAY_HOST
+              value: ""
+            - name: PATHWAY_PORT
+              value: "0"

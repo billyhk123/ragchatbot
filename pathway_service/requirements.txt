@@ -1,0 +1,4 @@
+pathway[xpack-llm]
+google-cloud-storage
+unstructured
+sentence-transformers
