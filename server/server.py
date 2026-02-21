@@ -2,7 +2,7 @@ import os
 import requests
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -11,14 +11,10 @@ from app.memory import ChatMemory
 
 app = FastAPI()
 
-# Build once at startup (important for performance on Cloud Run)
 chain = build_chain()
 memory = ChatMemory()
 
-VERIFY_TOKEN = os.environ.get("WHATSAPP_VERIFY_TOKEN", "")
-ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
-PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
-GRAPH_URL = os.environ.get("WHATSAPP_GRAPH_URL", "https://graph.facebook.com/v21.0")
+WHATSAPP_BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://localhost:3001")
 
 
 class ChatRequest(BaseModel):
@@ -31,24 +27,11 @@ class ChatResponse(BaseModel):
 
 
 def send_whatsapp_text(to: str, text: str) -> None:
-    if not ACCESS_TOKEN or not PHONE_NUMBER_ID:
-        raise RuntimeError("Missing WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
-
-    url = f"{GRAPH_URL}/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": text[:3500]},
-    }
-
-    r = requests.post(url, headers=headers, json=payload, timeout=20)
+    """Send a message via the whatsapp_bridge service."""
+    url = f"{WHATSAPP_BRIDGE_URL}/send"
+    r = requests.post(url, json={"to": to, "text": text[:3500]}, timeout=20)
     if r.status_code >= 300:
-        raise RuntimeError(f"WhatsApp send failed: {r.status_code} {r.text}")
+        raise RuntimeError(f"WhatsApp bridge send failed: {r.status_code} {r.text}")
 
 
 def rag_answer(user_text: str, user_id: str) -> str:
@@ -92,55 +75,11 @@ def chat(request: ChatRequest):
     return ChatResponse(answer=answer)
 
 
-@app.get("/webhook")
-def verify_webhook(
-    hub_mode: str = Query("", alias="hub.mode"),
-    hub_verify_token: str = Query("", alias="hub.verify_token"),
-    hub_challenge: str = Query("", alias="hub.challenge"),
-):
-    # Meta sends query params: hub.mode, hub.verify_token, hub.challenge
-    if hub_mode == "subscribe" and hub_verify_token == VERIFY_TOKEN:
-        return Response(content=hub_challenge, media_type="text/plain")
-    raise HTTPException(status_code=403, detail="Verification failed")
-
-
-@app.post("/webhook")
-async def whatsapp_webhook(request: Request):
-    data = await request.json()
-
+@app.get("/whatsapp/status")
+def whatsapp_status():
+    """Proxy the bridge's connection status."""
     try:
-        entries = data.get("entry") or []
-        if not entries:
-            return {"status": "ignored"}
-
-        handled = 0
-        for entry in entries:
-            for change in entry.get("changes") or []:
-                value = change.get("value") or {}
-                messages = value.get("messages") or []
-
-                # Often you'll receive status updates (delivered/read) with no "messages"
-                if not messages:
-                    continue
-
-                for msg in messages:
-                    if msg.get("type") != "text":
-                        continue
-
-                    from_number = msg.get("from")
-                    text = (msg.get("text") or {}).get("body", "")
-
-                    if not from_number or not text:
-                        continue
-
-                    answer = rag_answer(text, from_number)
-                    send_whatsapp_text(from_number, answer)
-                    handled += 1
-
-        if handled == 0:
-            return {"status": "ignored"}
-        return {"status": "ok"}
-
+        r = requests.get(f"{WHATSAPP_BRIDGE_URL}/status", timeout=5)
+        return r.json()
     except Exception as e:
-        # Cloud Run logs will contain stacktrace if you add logging later
-        raise HTTPException(status_code=500, detail=f"Webhook error: {type(e).__name__}")
+        raise HTTPException(status_code=502, detail=f"Bridge unreachable: {e}")

@@ -15,6 +15,10 @@ dist/
 build/
 *.egg-info/
 
+# node (whatsapp_bridge)
+node_modules/
+whatsapp_bridge/wa_session/
+
 
 
 # OS

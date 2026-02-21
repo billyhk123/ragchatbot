@@ -14,7 +14,7 @@ from pathway.stdlib.indexing import (
 from pathway.xpacks.llm import embedders
 from pathway.xpacks.llm.document_store import DocumentStore
 from pathway.xpacks.llm.parsers import UnstructuredParser
-from pathway.xpacks.llm.splitters import TokenCountSplitter
+from pathway.xpacks.llm.splitters import RecursiveSplitter
 
 
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "ragchatbot-raw")
@@ -110,7 +110,11 @@ def main():
     )
 
     parser = UnstructuredParser(chunking_mode="single")
-    splitter = TokenCountSplitter(max_tokens=400, overlap=40)
+    splitter = RecursiveSplitter(
+        chunk_size=400,
+        chunk_overlap=40,
+        encoding_name="cl100k_base",
+    )
 
     embedder = embedders.SentenceTransformerEmbedder(model=EMBEDDING_MODEL)
     retriever_factory = HybridIndexFactory(

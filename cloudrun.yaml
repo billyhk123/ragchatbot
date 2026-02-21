@@ -15,14 +15,8 @@ spec:
           env:
             - name: PORT
               value: "8080"
-            - name: WHATSAPP_VERIFY_TOKEN
+            - name: WHATSAPP_BRIDGE_URL
               value: "SET_IN_CLOUD_RUN"
-            - name: WHATSAPP_ACCESS_TOKEN
-              value: "SET_IN_CLOUD_RUN"
-            - name: WHATSAPP_PHONE_NUMBER_ID
-              value: "SET_IN_CLOUD_RUN"
-            - name: WHATSAPP_GRAPH_URL
-              value: "https://graph.facebook.com/v21.0"
             - name: POE_API_KEY
               value: "SET_IN_CLOUD_RUN"
             - name: POE_BOT_NAME
