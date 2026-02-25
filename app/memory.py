@@ -11,9 +11,9 @@ from firebase_admin import firestore
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import ChatPromptTemplate
 
 from app.llm_poe import PoeChatModel
+from app.prompts import SUMMARY_PROMPT
 from app.settings import settings
 
 
@@ -39,24 +39,6 @@ def _format_messages(messages: Iterable[dict]) -> str:
         prefix = "User" if role == "user" else "Assistant"
         lines.append(f"{prefix}: {m.get('content', '')}")
     return "\n".join(lines).strip()
-
-
-SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You summarize a conversation for long-term memory. "
-            "Produce a concise summary of factual details, preferences, and decisions. "
-            "Avoid repeating transient greetings or filler. Keep it short.",
-        ),
-        (
-            "human",
-            "Existing summary:\n{summary}\n\n"
-            "New conversation lines:\n{lines}\n\n"
-            "Updated summary:",
-        ),
-    ]
-)
 
 
 @dataclass

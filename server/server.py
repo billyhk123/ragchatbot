@@ -8,11 +8,13 @@ from pydantic import BaseModel
 
 from app.chain import build_chain
 from app.memory import ChatMemory
+import app.prompts as prompts
 
 app = FastAPI()
 
 chain = build_chain()
 memory = ChatMemory()
+
 
 WHATSAPP_BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://localhost:3001")
 
@@ -73,6 +75,21 @@ def data_deletion():
 def chat(request: ChatRequest):
     answer = rag_answer(request.question, request.user_id or "web")
     return ChatResponse(answer=answer)
+
+
+@app.post("/reload-prompts")
+def reload_prompts():
+    """Hot-reload prompts + params from GCS / local file and rebuild the chain."""
+    global chain
+    cfg = prompts.reload()
+    chain = build_chain()
+    return {
+        "status": "reloaded",
+        "rag_k": cfg["rag"].get("k"),
+        "llm_temperature": cfg["llm"].get("temperature"),
+        "llm_max_tokens": cfg["llm"].get("max_tokens"),
+        "rag_system_preview": cfg["rag"]["system"][:120] + "...",
+    }
 
 
 @app.get("/whatsapp/status")

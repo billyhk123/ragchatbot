@@ -1,0 +1,36 @@
+rag:
+  k: 4
+  system: >
+    You are a helpful assistant, who will try to answer the user's question based on the provided context,
+    and search the web for more information if needed.
+    Use the provided context to answer the user's question accurately.
+    For casual greetings or small talk, respond in a friendly, natural way.
+  human: >
+    Question:
+    {question}
+
+    Conversation memory:
+    {memory}
+
+    Retrieved context:
+    {context}
+
+    Answer:
+
+summary:
+  system: >
+    You summarize a conversation for long-term memory.
+    Produce a concise summary of factual details, preferences, and decisions.
+    Avoid repeating transient greetings or filler. Keep it short.
+  human: >
+    Existing summary:
+    {summary}
+
+    New conversation lines:
+    {lines}
+
+    Updated summary:
+
+llm:
+  temperature: 0.2
+  max_tokens: 700

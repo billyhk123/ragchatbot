@@ -30,7 +30,7 @@ EMBEDDING_MODEL = os.environ.get(
     "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-STATE_FILE = LOCAL_DIR / ".gcs_state.json"
+STATE_FILE = Path("/app/data/.gcs_state.json")
 
 
 def _load_state() -> dict:
