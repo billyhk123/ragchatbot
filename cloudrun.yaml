@@ -47,7 +47,7 @@ spec:
             - name: PATHWAY_URL
               value: "http://localhost:8081"
             - name: PATHWAY_HOST
-              value: "0.0.0.0"
+              value: ""
             - name: PATHWAY_PORT
               value: "8081"
             - name: GCS_PROMPTS_BUCKET
