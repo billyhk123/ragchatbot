@@ -9,11 +9,12 @@ from pathlib import Path
 
 import pathway as pw
 from google.cloud import storage
-from pathway.stdlib.indexing import (
-    BruteForceKnnFactory,
-    HybridIndexFactory,
-    TantivyBM25Factory,
-)
+from pathway.stdlib.indexing import HybridIndexFactory, TantivyBM25Factory
+
+try:
+    from pathway.stdlib.indexing import BruteForceKnnFactory
+except ImportError:
+    from pathway.stdlib.indexing.nearest_neighbors import BruteForceKnnFactory
 from pathway.xpacks.llm import embedders
 from pathway.xpacks.llm.document_store import DocumentStore
 from pathway.xpacks.llm.parsers import UnstructuredParser
@@ -27,7 +28,7 @@ LOCAL_DIR = Path(os.environ.get("LOCAL_DATA_DIR", "/app/data/raw"))
 SYNC_INTERVAL = int(os.environ.get("GCS_SYNC_INTERVAL", "60"))
 SYNC_DELETE = os.environ.get("GCS_SYNC_DELETE", "false").lower() == "true"
 
-PATHWAY_HOST = os.environ.get("PATHWAY_HOST", "0.0.0.0")
+PATHWAY_HOST = os.environ.get("PATHWAY_HOST", "0.0.0.0") or "0.0.0.0"
 PATHWAY_PORT = int(os.environ.get("PATHWAY_PORT", "8081"))
 
 EMBEDDING_MODEL = os.environ.get(
