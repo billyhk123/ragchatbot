@@ -1,4 +1,7 @@
+"""Pathway document store – runs in a background thread inside the main service."""
+
 import json
+import logging
 import os
 import threading
 import time
@@ -16,6 +19,7 @@ from pathway.xpacks.llm.document_store import DocumentStore
 from pathway.xpacks.llm.parsers import UnstructuredParser
 from pathway.xpacks.llm.splitters import RecursiveSplitter
 
+logger = logging.getLogger(__name__)
 
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "ragchatbot-raw")
 GCS_PREFIX = os.environ.get("GCS_PREFIX", "")
@@ -24,7 +28,7 @@ SYNC_INTERVAL = int(os.environ.get("GCS_SYNC_INTERVAL", "60"))
 SYNC_DELETE = os.environ.get("GCS_SYNC_DELETE", "false").lower() == "true"
 
 PATHWAY_HOST = os.environ.get("PATHWAY_HOST", "0.0.0.0")
-PATHWAY_PORT = int(os.environ.get("PATHWAY_PORT", "8080"))
+PATHWAY_PORT = int(os.environ.get("PATHWAY_PORT", "8081"))
 
 EMBEDDING_MODEL = os.environ.get(
     "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
@@ -91,15 +95,16 @@ def _start_sync_loop():
             try:
                 _sync_gcs_once()
             except Exception:
-                # Keep syncing on next interval; Pathway will use last good state.
-                pass
+                logger.exception("[Pathway] GCS sync error")
 
     t = threading.Thread(target=loop, name="gcs-sync", daemon=True)
     t.start()
 
 
 def main():
+    """Start the Pathway document store (blocking – run in a thread)."""
     LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("[Pathway] Starting on %s:%s", PATHWAY_HOST, PATHWAY_PORT)
     _start_sync_loop()
 
     docs = pw.io.fs.read(
@@ -171,7 +176,3 @@ def main():
     )
 
     pw.run(monitoring_level=pw.MonitoringLevel.NONE)
-
-
-if __name__ == "__main__":
-    main()

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ragchatbot"
 version = "0.1.0"
-description = "RAG chatbot with WhatsApp webhook"
+description = "RAG chatbot with Telegram bot"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -23,6 +23,10 @@ dependencies = [
   "numpy",
   "google-cloud-storage",
   "pyyaml",
+  "python-telegram-bot",
+  "pathway[xpack-llm,xpack-llm-docs]",
+  "unstructured",
+  "pdf2image",
 ]
 
 [tool.setuptools]

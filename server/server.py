@@ -1,22 +1,46 @@
 import os
-import requests
+import logging
+import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
+
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.chain import build_chain
 from app.memory import ChatMemory
+from app.pathway import main as pathway_main
 import app.prompts as prompts
+import app.telegram_bot as tg
 
-app = FastAPI()
+logger = logging.getLogger(__name__)
+
+SERVICE_URL = os.environ.get("SERVICE_URL", "")
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    threading.Thread(target=pathway_main, name="pathway", daemon=True).start()
+    logger.info("[Server] Pathway thread started")
+
+    tg.set_rag_answer(rag_answer)
+    await tg.init()
+    if SERVICE_URL:
+        try:
+            await tg.register_webhook(SERVICE_URL)
+        except Exception:
+            logger.exception("[TG] Failed to register webhook on startup")
+    yield
+    await tg.shutdown()
+
+
+app = FastAPI(lifespan=lifespan)
 
 chain = build_chain()
 memory = ChatMemory()
-
-
-WHATSAPP_BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://localhost:3001")
 
 
 class ChatRequest(BaseModel):
@@ -28,19 +52,13 @@ class ChatResponse(BaseModel):
     answer: str
 
 
-def send_whatsapp_text(to: str, text: str) -> None:
-    """Send a message via the whatsapp_bridge service."""
-    url = f"{WHATSAPP_BRIDGE_URL}/send"
-    r = requests.post(url, json={"to": to, "text": text[:3500]}, timeout=20)
-    if r.status_code >= 300:
-        raise RuntimeError(f"WhatsApp bridge send failed: {r.status_code} {r.text}")
-
-
 def rag_answer(user_text: str, user_id: str) -> str:
-    # Keep this wrapper: WhatsApp/channel code should never know about Poe/OpenAI/etc.
+    logger.info("[RAG] user=%s question=%s", user_id, user_text[:200])
     recall = memory.build_context(user_id, user_text)
     memory_context = memory.format_context(recall)
+    logger.info("[RAG] memory_context length=%d preview=%s", len(memory_context), memory_context[:300])
     answer = chain.invoke({"question": user_text, "memory": memory_context})
+    logger.info("[RAG] answer length=%d preview=%s", len(answer), answer[:300])
     memory.update_after_turn(user_id, user_text, answer)
     return answer
 
@@ -92,11 +110,35 @@ def reload_prompts():
     }
 
 
-@app.get("/whatsapp/status")
-def whatsapp_status():
-    """Proxy the bridge's connection status."""
+# ── Telegram ────────────────────────────────────────────────────────
+
+@app.post("/telegram/webhook")
+async def telegram_webhook(request: Request):
+    payload = await request.json()
+    await tg.process_update(payload)
+    return {"ok": True}
+
+
+@app.post("/telegram/set-webhook")
+async def telegram_set_webhook(request: Request):
+    """Manually register the Telegram webhook. Body: {"url": "https://..."}"""
+    body = await request.json()
+    base_url = body.get("url", "").rstrip("/")
+    if not base_url:
+        return {"error": "provide 'url' in the request body"}
+    result = await tg.register_webhook(base_url)
+    return result
+
+
+@app.get("/telegram/status")
+async def telegram_status():
     try:
-        r = requests.get(f"{WHATSAPP_BRIDGE_URL}/status", timeout=5)
-        return r.json()
+        tg_app = tg.get_application()
+        info = await tg_app.bot.get_webhook_info()
+        return {
+            "webhook_url": info.url,
+            "pending_update_count": info.pending_update_count,
+            "last_error": info.last_error_message or None,
+        }
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Bridge unreachable: {e}")
+        return {"error": str(e)}

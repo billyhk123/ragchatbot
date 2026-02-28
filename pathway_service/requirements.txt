@@ -1,5 +1,0 @@
-pathway[xpack-llm,xpack-llm-docs]
-google-cloud-storage
-unstructured
-sentence-transformers
-pdf2image
