@@ -26,6 +26,6 @@ class Settings(BaseModel):
 
     pathway_url: str = os.getenv("PATHWAY_URL", "")
     pathway_host: str = os.getenv("PATHWAY_HOST", "")
-    pathway_port: int = int(os.getenv("PATHWAY_PORT", "0"))
+    pathway_port: int = int(os.getenv("PATHWAY_PORT", "8081"))
 
 settings = Settings()

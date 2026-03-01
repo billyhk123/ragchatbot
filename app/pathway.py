@@ -3,72 +3,23 @@
 import json
 import logging
 import os
-import sys
 import threading
 import time
 from pathlib import Path
 
+import pathway as pw
+from google.cloud import storage
+from pathway.stdlib.indexing import (
+    BruteForceKnnFactory,
+    HybridIndexFactory,
+    TantivyBM25Factory,
+)
+from pathway.xpacks.llm import embedders
+from pathway.xpacks.llm.document_store import DocumentStore
+from pathway.xpacks.llm.parsers import UnstructuredParser
+from pathway.xpacks.llm.splitters import RecursiveSplitter
+
 logger = logging.getLogger(__name__)
-
-# region agent log — diagnostic: discover installed Pathway module structure
-_PATHWAY_OK = False
-try:
-    import pathway as pw
-    logger.info("[Pathway:DIAG] pathway version=%s", getattr(pw, "__version__", "unknown"))
-
-    import pathway.stdlib.indexing as _psi
-    _idx_attrs = [x for x in dir(_psi) if not x.startswith("_")]
-    logger.info("[Pathway:DIAG] pathway.stdlib.indexing attrs=%s", _idx_attrs)
-
-    _idx_submodules = []
-    for name in ["bm25", "hybrid_index", "nearest_neighbors", "data_index",
-                  "full_text_document_index", "vector_document_index", "retrievers"]:
-        try:
-            __import__(f"pathway.stdlib.indexing.{name}")
-            _idx_submodules.append(name)
-        except ImportError:
-            pass
-    logger.info("[Pathway:DIAG] available submodules=%s", _idx_submodules)
-
-    BruteForceKnnFactory = None
-    HybridIndexFactory = None
-    TantivyBM25Factory = None
-
-    try:
-        from pathway.stdlib.indexing import (
-            BruteForceKnnFactory, HybridIndexFactory, TantivyBM25Factory,
-        )
-        logger.info("[Pathway:DIAG] import strategy: top-level OK")
-    except ImportError as e1:
-        logger.info("[Pathway:DIAG] top-level import failed: %s", e1)
-        try:
-            from pathway.stdlib.indexing.bm25 import TantivyBM25Factory
-            from pathway.stdlib.indexing.hybrid_index import HybridIndexFactory
-            from pathway.stdlib.indexing.nearest_neighbors import BruteForceKnnFactory
-            logger.info("[Pathway:DIAG] import strategy: submodule OK")
-        except ImportError as e2:
-            logger.info("[Pathway:DIAG] submodule import failed: %s", e2)
-            for attr in _idx_attrs:
-                obj = getattr(_psi, attr, None)
-                if obj and "Factory" in attr:
-                    logger.info("[Pathway:DIAG] found factory: %s = %s", attr, obj)
-
-    if BruteForceKnnFactory and HybridIndexFactory and TantivyBM25Factory:
-        _PATHWAY_OK = True
-    else:
-        logger.error("[Pathway] Missing indexing classes — Pathway retriever will not start")
-        logger.error("[Pathway] BruteForceKnnFactory=%s HybridIndexFactory=%s TantivyBM25Factory=%s",
-                     BruteForceKnnFactory, HybridIndexFactory, TantivyBM25Factory)
-
-    from google.cloud import storage
-    from pathway.xpacks.llm import embedders
-    from pathway.xpacks.llm.document_store import DocumentStore
-    from pathway.xpacks.llm.parsers import UnstructuredParser
-    from pathway.xpacks.llm.splitters import RecursiveSplitter
-
-except Exception:
-    logger.exception("[Pathway] Failed to import pathway — retriever will not start")
-# endregion
 
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "ragchatbot-raw")
 GCS_PREFIX = os.environ.get("GCS_PREFIX", "")
@@ -152,9 +103,6 @@ def _start_sync_loop():
 
 def main():
     """Start the Pathway document store (blocking – run in a thread)."""
-    if not _PATHWAY_OK:
-        logger.error("[Pathway] Skipping start — required classes not available")
-        return
     LOCAL_DIR.mkdir(parents=True, exist_ok=True)
     logger.info("[Pathway] Starting on %s:%s", PATHWAY_HOST, PATHWAY_PORT)
     _start_sync_loop()
