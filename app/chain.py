@@ -17,6 +17,7 @@ _TRUNC = 500
 
 
 def format_docs(docs):
+    """Format retrieved Documents into a single string with source citations."""
     lines = []
     for d in docs:
         src = d.metadata.get("source", "unknown")
@@ -46,6 +47,7 @@ def _log_answer(answer: str) -> str:
 
 
 def _build_retriever(k: int = 4):
+    """Create a retriever: direct HTTP to Pathway if configured, else local FAISS."""
     if settings.pathway_url or settings.pathway_host:
         base = settings.pathway_url or f"http://{settings.pathway_host}:{settings.pathway_port}"
         def _retrieve(query: str) -> list:
@@ -72,8 +74,8 @@ _retriever = None
 _llm = None
 _last_k = None
 
-
 def build_chain():
+    """Build (or rebuild) the RAG chain: retriever -> prompt -> LLM -> answer."""
     global _retriever, _llm, _last_k
 
     cfg = prompts._cfg

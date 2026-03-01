@@ -30,4 +30,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["app", "ingest", "server", "scripts"]
+packages = ["app", "ingest", "server"]

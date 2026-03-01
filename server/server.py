@@ -53,6 +53,7 @@ class ChatResponse(BaseModel):
 
 
 def rag_answer(user_text: str, user_id: str) -> str:
+    """Run the full RAG pipeline: recall memory, retrieve context, invoke LLM, store turn."""
     logger.info("[RAG] user=%s question=%s", user_id, user_text[:200])
     recall = memory.build_context(user_id, user_text)
     memory_context = memory.format_context(recall)

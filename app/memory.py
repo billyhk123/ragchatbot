@@ -49,6 +49,8 @@ class MemoryRecall:
 
 
 class ChatMemory:
+    """Per-user conversation memory backed by Firestore with FAISS vector recall."""
+
     def __init__(self):
         self.client = _init_firestore()
         self.embeddings = HuggingFaceEmbeddings(model_name=settings.embedding_model)
@@ -132,6 +134,7 @@ class ChatMemory:
         batch.commit()
 
     def _search_vectors(self, user_id: str, query: str) -> List[dict]:
+        """Find past messages relevant to the query using FAISS similarity search."""
         if self.recall_k <= 0:
             return []
         query_ref = (
@@ -166,6 +169,7 @@ class ChatMemory:
         return result.generations[0].message.content.strip()
 
     def update_after_turn(self, user_id: str, user_text: str, assistant_text: str) -> None:
+        """Store the turn and summarize older messages when the window overflows."""
         self.add_message(user_id, "user", user_text)
         self.add_message(user_id, "assistant", assistant_text)
 
@@ -191,6 +195,7 @@ class ChatMemory:
         batch.commit()
 
     def build_context(self, user_id: str, query: str) -> MemoryRecall:
+        """Assemble summary, recent messages, and relevant past messages for the prompt."""
         summary = self.get_summary(user_id)
         recent = self._recent_messages(user_id, self.window_turns * 2)
         relevant = self._search_vectors(user_id, query)
