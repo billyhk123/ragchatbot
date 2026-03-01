@@ -24,7 +24,8 @@ dependencies = [
   "google-cloud-storage",
   "pyyaml",
   "python-telegram-bot",
-  "pathway[xpack-llm,xpack-llm-docs]",
+  "pathway[xpack-llm,xpack-llm-docs]>=0.20",
+  "openai",
   "unstructured",
   "pdf2image",
 ]
