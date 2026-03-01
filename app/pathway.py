@@ -9,12 +9,9 @@ from pathlib import Path
 
 import pathway as pw
 from google.cloud import storage
-from pathway.stdlib.indexing import HybridIndexFactory, TantivyBM25Factory
-
-try:
-    from pathway.stdlib.indexing import BruteForceKnnFactory
-except ImportError:
-    from pathway.stdlib.indexing.nearest_neighbors import BruteForceKnnFactory
+from pathway.stdlib.indexing.bm25 import TantivyBM25Factory
+from pathway.stdlib.indexing.hybrid_index import HybridIndexFactory
+from pathway.stdlib.indexing.nearest_neighbors import BruteForceKnnFactory
 from pathway.xpacks.llm import embedders
 from pathway.xpacks.llm.document_store import DocumentStore
 from pathway.xpacks.llm.parsers import UnstructuredParser
