@@ -1,33 +1,45 @@
+"""LLM wrappers using Poe's OpenAI-compatible API."""
+
 from __future__ import annotations
 
 from typing import Any, List, Optional
 
-import fastapi_poe as fp
+import openai
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from app.settings import settings
 
+_client: openai.OpenAI | None = None
 
-def _to_poe_messages(messages: List[BaseMessage]) -> List[fp.ProtocolMessage]:
-    poe_messages: List[fp.ProtocolMessage] = []
+
+def get_client() -> openai.OpenAI:
+    """Return a shared OpenAI client pointed at Poe's API."""
+    global _client
+    if _client is None:
+        _client = openai.OpenAI(
+            api_key=settings.poe_api_key,
+            base_url="https://api.poe.com/v1",
+        )
+    return _client
+
+
+def _to_openai_messages(messages: List[BaseMessage]) -> list[dict]:
+    out = []
     for m in messages:
         if isinstance(m, SystemMessage):
             role = "system"
         elif isinstance(m, HumanMessage):
             role = "user"
         else:
-            # LangChain has AIMessage and others; Poe mainly expects user/system.
-            # We can map AI messages to "assistant" if supported by ProtocolMessage;
-            # if not, you can skip AI history or include it as user text.
             role = "assistant"
-        poe_messages.append(fp.ProtocolMessage(role=role, content=m.content))
-    return poe_messages
+        out.append({"role": role, "content": m.content})
+    return out
 
 
 class PoeChatModel(BaseChatModel):
-    """Minimal LangChain ChatModel wrapper around fastapi_poe."""
+    """LangChain ChatModel wrapper using Poe's OpenAI-compatible API."""
 
     bot_name: str = settings.poe_bot_name
     api_key: str = settings.poe_api_key
@@ -46,20 +58,15 @@ class PoeChatModel(BaseChatModel):
         run_manager: Optional[Any] = None,
         **kwargs: Any,
     ) -> ChatResult:
-        poe_messages = _to_poe_messages(messages)
+        client = get_client()
+        resp = client.chat.completions.create(
+            model=self.bot_name,
+            messages=_to_openai_messages(messages),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        text = resp.choices[0].message.content or ""
 
-        text_parts: List[str] = []
-        for partial in fp.get_bot_response_sync(
-            messages=poe_messages,
-            bot_name=self.bot_name,
-            api_key=self.api_key,
-        ):
-            if partial.text:
-                text_parts.append(partial.text)
-
-        text = "".join(text_parts)
-
-        # Apply stop tokens crudely if needed
         if stop:
             for s in stop:
                 if s in text:

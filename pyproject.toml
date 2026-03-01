@@ -16,7 +16,6 @@ dependencies = [
   "pydantic",
   "langchain-core",
   "langchain-community",
-  "fastapi-poe",
   "faiss-cpu",
   "sentence-transformers",
   "firebase-admin",

@@ -1,19 +1,21 @@
+import json
 import logging
 
 import requests as _requests
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
 from app.settings import settings
 import app.prompts as prompts
-from app.llm_poe import PoeChatModel
+from app.llm_poe import get_client
+from app.crypto import TOOLS as CRYPTO_TOOLS, execute_tool as execute_crypto_tool
 
 logger = logging.getLogger(__name__)
 
 _TRUNC = 500
+_MAX_TOOL_ROUNDS = 3
 
 
 def format_docs(docs):
@@ -25,31 +27,11 @@ def format_docs(docs):
     return "\n\n---\n\n".join(lines)
 
 
-def _log_retriever_input(question: str) -> str:
-    logger.info("[Chain:1-retriever] query=%s", question[:_TRUNC])
-    return question
-
-
-def _log_retrieved_context(context: str) -> str:
-    logger.info("[Chain:2-context] length=%d preview=%s", len(context), context[:_TRUNC])
-    return context
-
-
-def _log_prompt(prompt_value):
-    for msg in prompt_value.to_messages():
-        logger.info("[Chain:3-prompt] role=%s content=%s", msg.type, msg.content[:_TRUNC])
-    return prompt_value
-
-
-def _log_answer(answer: str) -> str:
-    logger.info("[Chain:4-answer] length=%d preview=%s", len(answer), answer[:_TRUNC])
-    return answer
-
-
 def _build_retriever(k: int = 4):
     """Create a retriever: direct HTTP to Pathway if configured, else local FAISS."""
     if settings.pathway_url or settings.pathway_host:
         base = settings.pathway_url or f"http://{settings.pathway_host}:{settings.pathway_port}"
+
         def _retrieve(query: str) -> list:
             resp = _requests.post(
                 f"{base}/v1/retrieve", json={"query": query, "k": k}, timeout=30,
@@ -59,6 +41,7 @@ def _build_retriever(k: int = 4):
                 Document(page_content=r.get("text", ""), metadata=r.get("metadata", {}))
                 for r in sorted(resp.json(), key=lambda x: x["dist"])
             ]
+
         return RunnableLambda(_retrieve)
 
     embeddings = HuggingFaceEmbeddings(model_name=settings.embedding_model)
@@ -70,13 +53,27 @@ def _build_retriever(k: int = 4):
     return db.as_retriever(search_kwargs={"k": k})
 
 
+def _execute_tool_call(tc) -> str:
+    """Dispatch a single tool call and return the result string."""
+    args = json.loads(tc.function.arguments)
+    result = execute_crypto_tool(tc.function.name, args)
+    logger.info("[Chain:tool] %s(%s) -> %s", tc.function.name, args, result[:_TRUNC])
+    return result
+
+
 _retriever = None
-_llm = None
 _last_k = None
 
+
 def build_chain():
-    """Build (or rebuild) the RAG chain: retriever -> prompt -> LLM -> answer."""
-    global _retriever, _llm, _last_k
+    """Build (or rebuild) the RAG chain with tool-calling support.
+
+    Returns a LangChain-compatible Runnable that accepts
+    ``{"question": str, "memory": str}`` and returns a string answer.
+    Internally it: retrieves context -> calls the LLM with tools ->
+    executes any tool calls in a loop -> returns the final text answer.
+    """
+    global _retriever, _last_k
 
     cfg = prompts._cfg
     k = int(cfg.get("rag", {}).get("k", 4))
@@ -87,25 +84,52 @@ def build_chain():
         _retriever = _build_retriever(k)
         _last_k = k
 
-    if _llm is None or _llm.temperature != temperature or _llm.max_tokens != max_tokens:
-        _llm = PoeChatModel(temperature=temperature, max_tokens=max_tokens)
+    def _invoke(inputs: dict) -> str:
+        question = inputs["question"]
+        memory = inputs.get("memory", "")
 
-    chain = (
-        {
-            "question": RunnableLambda(lambda x: x["question"]),
-            "memory": RunnableLambda(lambda x: x.get("memory", "")),
-            "context": (
-                RunnableLambda(lambda x: x["question"])
-                | RunnableLambda(_log_retriever_input)
-                | _retriever
-                | format_docs
-                | RunnableLambda(_log_retrieved_context)
-            ),
-        }
-        | prompts.RAG_PROMPT
-        | RunnableLambda(_log_prompt)
-        | _llm
-        | StrOutputParser()
-        | RunnableLambda(_log_answer)
-    )
-    return chain
+        # --- 1. Retrieve context ---
+        logger.info("[Chain:1-retriever] query=%s", question[:_TRUNC])
+        docs = _retriever.invoke(question)
+        context = format_docs(docs)
+        logger.info("[Chain:2-context] length=%d preview=%s", len(context), context[:_TRUNC])
+
+        # --- 2. Build messages ---
+        system_text = cfg["rag"]["system"]
+        human_text = cfg["rag"]["human"].format(
+            question=question, memory=memory, context=context,
+        )
+        messages: list[dict] = [
+            {"role": "system", "content": system_text},
+            {"role": "user", "content": human_text},
+        ]
+
+        # --- 3. LLM call with tool loop ---
+        client = get_client()
+        for _round in range(_MAX_TOOL_ROUNDS):
+            resp = client.chat.completions.create(
+                model=settings.poe_bot_name,
+                messages=messages,
+                tools=CRYPTO_TOOLS,
+                tool_choice="auto",
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            msg = resp.choices[0].message
+
+            if not msg.tool_calls:
+                answer = msg.content or ""
+                logger.info("[Chain:4-answer] length=%d preview=%s", len(answer), answer[:_TRUNC])
+                return answer
+
+            messages.append(msg)
+            for tc in msg.tool_calls:
+                result = _execute_tool_call(tc)
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+
+        # If we exhausted tool rounds, return whatever the last assistant message was
+        answer = msg.content or ""
+        logger.info("[Chain:4-answer] (max rounds) length=%d", len(answer))
+        return answer
+
+    return RunnableLambda(_invoke)
