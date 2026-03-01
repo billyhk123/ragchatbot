@@ -88,11 +88,15 @@ def build_chain():
         question = inputs["question"]
         memory = inputs.get("memory", "")
 
-        # --- 1. Retrieve context ---
+        # --- 1. Retrieve context (non-fatal: empty context if Pathway is down) ---
         logger.info("[Chain:1-retriever] query=%s", question[:_TRUNC])
-        docs = _retriever.invoke(question)
-        context = format_docs(docs)
-        logger.info("[Chain:2-context] length=%d preview=%s", len(context), context[:_TRUNC])
+        try:
+            docs = _retriever.invoke(question)
+            context = format_docs(docs)
+            logger.info("[Chain:2-context] length=%d preview=%s", len(context), context[:_TRUNC])
+        except Exception:
+            logger.exception("[Chain:1-retriever] retrieval failed, proceeding without context")
+            context = ""
 
         # --- 2. Build messages ---
         system_text = cfg["rag"]["system"]
