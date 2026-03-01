@@ -64,3 +64,5 @@ spec:
               value: "false"
             - name: LOCAL_DATA_DIR
               value: "/app/data/raw"
+            - name: COINMARKETCAP_API_KEY
+              value: "SET_IN_CLOUD_RUN"

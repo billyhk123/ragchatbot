@@ -4,8 +4,12 @@ import os
 import asyncio
 import logging
 
-from telegram import Update
-from telegram.ext import Application, MessageHandler, CommandHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters,
+)
+
+from app.crypto import DEFAULT_COINS, format_price, get_price
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +26,50 @@ def set_rag_answer(fn):
 
 
 async def _start_command(update: Update, context) -> None:
+    keyboard = [[InlineKeyboardButton("Check Crypto Price", callback_data="menu:price")]]
     await update.message.reply_text(
         "Hi! I'm your RAG chatbot. Send me a message and I'll answer "
-        "using my knowledge base."
+        "using my knowledge base.\n\n"
+        "You can also check live crypto prices:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+
+async def _price_command(update: Update, context) -> None:
+    """Show coin selection keyboard."""
+    keyboard = [
+        [InlineKeyboardButton(c.title(), callback_data=f"coin:{c}")]
+        for c in DEFAULT_COINS
+    ]
+    await update.message.reply_text(
+        "Choose a cryptocurrency:", reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def _button_callback(update: Update, context) -> None:
+    """Handle inline-button presses."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data or ""
+
+    if data == "menu:price":
+        keyboard = [
+            [InlineKeyboardButton(c.title(), callback_data=f"coin:{c}")]
+            for c in DEFAULT_COINS
+        ]
+        await query.edit_message_text(
+            "Choose a cryptocurrency:", reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    if data.startswith("coin:"):
+        slug = data.removeprefix("coin:")
+        await query.edit_message_text(f"Fetching {slug.title()} price…")
+        info = await asyncio.to_thread(get_price, slug)
+        if info:
+            await query.edit_message_text(format_price(info))
+        else:
+            await query.edit_message_text(f"Could not fetch price for {slug}.")
 
 
 async def _handle_message(update: Update, context) -> None:
@@ -70,6 +114,8 @@ def get_application() -> Application:
             .build()
         )
         _application.add_handler(CommandHandler("start", _start_command))
+        _application.add_handler(CommandHandler("price", _price_command))
+        _application.add_handler(CallbackQueryHandler(_button_callback))
         _application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_message)
         )
