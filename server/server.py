@@ -13,10 +13,9 @@ from pydantic import BaseModel
 from app.chain import build_chain
 from app.memory import ChatMemory
 from app.pathway import main as pathway_main
+from app.tracing import Trace, recent_traces
 import app.prompts as prompts
 import app.telegram_bot as tg
-
-logger = logging.getLogger(__name__)
 
 SERVICE_URL = os.environ.get("SERVICE_URL", "")
 
@@ -24,15 +23,10 @@ SERVICE_URL = os.environ.get("SERVICE_URL", "")
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     threading.Thread(target=pathway_main, name="pathway", daemon=True).start()
-    logger.info("[Server] Pathway thread started")
-
     tg.set_rag_answer(rag_answer)
     await tg.init()
     if SERVICE_URL:
-        try:
-            await tg.register_webhook(SERVICE_URL)
-        except Exception:
-            logger.exception("[TG] Failed to register webhook on startup")
+        await tg.register_webhook(SERVICE_URL)
     yield
     await tg.shutdown()
 
@@ -54,14 +48,29 @@ class ChatResponse(BaseModel):
 
 def rag_answer(user_text: str, user_id: str) -> str:
     """Run the full RAG pipeline: recall memory, retrieve context, invoke LLM, store turn."""
-    logger.info("[RAG] user=%s question=%s", user_id, user_text[:200])
-    recall = memory.build_context(user_id, user_text)
-    memory_context = memory.format_context(recall)
-    logger.info("[RAG] memory_context length=%d preview=%s", len(memory_context), memory_context[:300])
-    answer = chain.invoke({"question": user_text, "memory": memory_context})
-    logger.info("[RAG] answer length=%d preview=%s", len(answer), answer[:300])
-    memory.update_after_turn(user_id, user_text, answer)
-    return answer
+    trace = Trace(user_id, user_text)
+    try:
+        recall = memory.build_context(user_id, user_text)
+        memory_context = memory.format_context(recall)
+
+        trace.record_memory(
+            summary_length=len(recall.summary),
+            recent_count=len(recall.recent),
+            relevant_count=len(recall.relevant),
+            formatted_length=len(memory_context),
+        )
+
+        answer = chain.invoke({
+            "question": user_text,
+            "memory": memory_context,
+            "trace": trace,
+        })
+        memory.update_after_turn(user_id, user_text, answer)
+        trace.finish(answer)
+        return answer
+    except Exception as exc:
+        trace.finish("", error=str(exc))
+        raise
 
 
 @app.get("/health")
@@ -109,6 +118,18 @@ def reload_prompts():
         "llm_max_tokens": cfg["llm"].get("max_tokens"),
         "rag_system_preview": cfg["rag"]["system"][:120] + "...",
     }
+
+
+# ── Traces ───────────────────────────────────────────────────────────
+
+@app.get("/traces")
+def get_traces(user_id: str | None = None, limit: int = 20):
+    """Return recent pipeline traces from Firestore."""
+    rows = recent_traces(user_id=user_id, limit=min(limit, 100))
+    for r in rows:
+        if "timestamp" in r and hasattr(r["timestamp"], "isoformat"):
+            r["timestamp"] = r["timestamp"].isoformat()
+    return {"count": len(rows), "traces": rows}
 
 
 # ── Telegram ────────────────────────────────────────────────────────

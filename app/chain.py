@@ -1,5 +1,5 @@
 import json
-import logging
+import time
 
 import requests as _requests
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -12,9 +12,6 @@ import app.prompts as prompts
 from app.llm_poe import get_client
 from app.crypto import TOOLS as CRYPTO_TOOLS, execute_tool as execute_crypto_tool
 
-logger = logging.getLogger(__name__)
-
-_TRUNC = 500
 _MAX_TOOL_ROUNDS = 3
 
 
@@ -61,7 +58,8 @@ def build_chain():
     """Build (or rebuild) the RAG chain with tool-calling support.
 
     Returns a LangChain-compatible Runnable that accepts
-    ``{"question": str, "memory": str}`` and returns a string answer.
+    ``{"question": str, "memory": str, "trace": Trace | None}``
+    and returns a string answer.
     """
     global _retriever, _last_k
 
@@ -77,16 +75,30 @@ def build_chain():
     def _invoke(inputs: dict) -> str:
         question = inputs["question"]
         memory = inputs.get("memory", "")
+        trace = inputs.get("trace")
 
         # --- 1. Retrieve context (non-fatal) ---
-        logger.info("[Chain:1-retriever] query=%s", question[:_TRUNC])
+        t0 = time.monotonic()
+        ret_error = None
+        docs = []
         try:
             docs = _retriever.invoke(question)
             context = format_docs(docs)
-            logger.info("[Chain:2-context] length=%d preview=%s", len(context), context[:_TRUNC])
-        except Exception:
-            logger.exception("[Chain:1-retriever] retrieval failed, proceeding without context")
+        except Exception as exc:
             context = ""
+            ret_error = str(exc)
+        ret_ms = int((time.monotonic() - t0) * 1000)
+
+        sources = [d.metadata.get("source", "unknown") for d in docs]
+        if trace:
+            trace.record_retrieval(
+                query=question,
+                doc_count=len(docs),
+                context_length=len(context),
+                sources=sources,
+                duration_ms=ret_ms,
+                error=ret_error,
+            )
 
         # --- 2. Build messages ---
         system_text = cfg["rag"]["system"]
@@ -100,7 +112,10 @@ def build_chain():
 
         # --- 3. LLM call with tool loop ---
         client = get_client()
+        llm_t0 = time.monotonic()
+        rounds = 0
         for _round in range(_MAX_TOOL_ROUNDS):
+            rounds = _round + 1
             resp = client.chat.completions.create(
                 model=settings.poe_bot_name,
                 messages=messages,
@@ -113,18 +128,44 @@ def build_chain():
 
             if not msg.tool_calls:
                 answer = msg.content or ""
-                logger.info("[Chain:4-answer] length=%d preview=%s", len(answer), answer[:_TRUNC])
+                llm_ms = int((time.monotonic() - llm_t0) * 1000)
+                if trace:
+                    trace.record_llm(
+                        model=settings.poe_bot_name,
+                        messages_sent=len(messages),
+                        temperature=temperature,
+                        answer_length=len(answer),
+                        rounds=rounds,
+                        duration_ms=llm_ms,
+                    )
                 return answer
 
             messages.append(msg)
             for tc in msg.tool_calls:
+                tool_t0 = time.monotonic()
                 args = json.loads(tc.function.arguments)
                 result = execute_crypto_tool(tc.function.name, args)
-                logger.info("[Chain:tool] %s(%s) -> %s", tc.function.name, args, result[:_TRUNC])
+                tool_ms = int((time.monotonic() - tool_t0) * 1000)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                if trace:
+                    trace.record_tool(
+                        name=tc.function.name,
+                        arguments=args,
+                        result=result,
+                        duration_ms=tool_ms,
+                    )
 
         answer = msg.content or ""
-        logger.info("[Chain:4-answer] (max rounds) length=%d", len(answer))
+        llm_ms = int((time.monotonic() - llm_t0) * 1000)
+        if trace:
+            trace.record_llm(
+                model=settings.poe_bot_name,
+                messages_sent=len(messages),
+                temperature=temperature,
+                answer_length=len(answer),
+                rounds=rounds,
+                duration_ms=llm_ms,
+            )
         return answer
 
     return RunnableLambda(_invoke)

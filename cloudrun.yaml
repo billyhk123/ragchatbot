@@ -7,6 +7,7 @@ spec:
     metadata:
       annotations:
         run.googleapis.com/startup-cpu-boost: "true"
+        run.googleapis.com/startup-timeout: "600s"
     spec:
       containers:
         - image: gcr.io/PROJECT_ID/IMAGE:TAG
@@ -66,3 +67,7 @@ spec:
               value: "/app/data/raw"
             - name: COINMARKETCAP_API_KEY
               value: "SET_IN_CLOUD_RUN"
+            - name: TRACING_ENABLED
+              value: "true"
+            - name: TRACING_TTL_DAYS
+              value: "30"
