@@ -6,7 +6,7 @@ load_dotenv()
 
 class Settings(BaseModel):
     poe_api_key: str = os.getenv("POE_API_KEY", "")
-    poe_bot_name: str = os.getenv("POE_BOT_NAME", "GPT-3.5-Turbo")
+    poe_bot_name: str = os.getenv("POE_BOT_NAME", "GPT-5.2")
 
     embedding_model: str = os.getenv(
         "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"

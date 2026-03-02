@@ -53,14 +53,6 @@ def _build_retriever(k: int = 4):
     return db.as_retriever(search_kwargs={"k": k})
 
 
-def _execute_tool_call(tc) -> str:
-    """Dispatch a single tool call and return the result string."""
-    args = json.loads(tc.function.arguments)
-    result = execute_crypto_tool(tc.function.name, args)
-    logger.info("[Chain:tool] %s(%s) -> %s", tc.function.name, args, result[:_TRUNC])
-    return result
-
-
 _retriever = None
 _last_k = None
 
@@ -70,8 +62,6 @@ def build_chain():
 
     Returns a LangChain-compatible Runnable that accepts
     ``{"question": str, "memory": str}`` and returns a string answer.
-    Internally it: retrieves context -> calls the LLM with tools ->
-    executes any tool calls in a loop -> returns the final text answer.
     """
     global _retriever, _last_k
 
@@ -88,7 +78,7 @@ def build_chain():
         question = inputs["question"]
         memory = inputs.get("memory", "")
 
-        # --- 1. Retrieve context (non-fatal: empty context if Pathway is down) ---
+        # --- 1. Retrieve context (non-fatal) ---
         logger.info("[Chain:1-retriever] query=%s", question[:_TRUNC])
         try:
             docs = _retriever.invoke(question)
@@ -128,10 +118,11 @@ def build_chain():
 
             messages.append(msg)
             for tc in msg.tool_calls:
-                result = _execute_tool_call(tc)
+                args = json.loads(tc.function.arguments)
+                result = execute_crypto_tool(tc.function.name, args)
+                logger.info("[Chain:tool] %s(%s) -> %s", tc.function.name, args, result[:_TRUNC])
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
-        # If we exhausted tool rounds, return whatever the last assistant message was
         answer = msg.content or ""
         logger.info("[Chain:4-answer] (max rounds) length=%d", len(answer))
         return answer

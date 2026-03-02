@@ -83,23 +83,14 @@ async def _handle_message(update: Update, context) -> None:
 
     logger.info("[TG] %s: %s", user_id, user_text[:80])
 
-    for attempt in range(2):
-        try:
-            answer = await asyncio.to_thread(_rag_answer_fn, user_text, user_id)
-            await update.message.reply_text(answer[:4096])
-            return
-        except Exception:
-            if attempt == 0:
-                logger.warning("[TG] Attempt 1 failed, retrying in 40s")
-                await update.message.reply_text(
-                    "Loading, please wait a moment."
-                )
-                await asyncio.sleep(40)
-            else:
-                logger.exception("[TG] Error generating answer")
-                await update.message.reply_text(
-                    "Sorry, something went wrong, please try again later."
-                )
+    try:
+        answer = await asyncio.to_thread(_rag_answer_fn, user_text, user_id)
+        await update.message.reply_text(answer[:4096])
+    except Exception:
+        logger.exception("[TG] Error generating answer")
+        await update.message.reply_text(
+            "Sorry, something went wrong, please try again later."
+        )
 
 
 def get_application() -> Application:

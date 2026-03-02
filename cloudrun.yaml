@@ -25,7 +25,7 @@ spec:
             - name: POE_API_KEY
               value: "SET_IN_CLOUD_RUN"
             - name: POE_BOT_NAME
-              value: "GPT-3.5-Turbo"
+              value: "telegrambot4taye"
             - name: EMBEDDING_MODEL
               value: "sentence-transformers/all-MiniLM-L6-v2"
             - name: PERSIST_DIR
