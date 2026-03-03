@@ -54,10 +54,10 @@ def rag_answer(user_text: str, user_id: str) -> str:
         memory_context = memory.format_context(recall)
 
         trace.record_memory(
-            summary_length=len(recall.summary),
-            recent_count=len(recall.recent),
-            relevant_count=len(recall.relevant),
-            formatted_length=len(memory_context),
+            summary=recall.summary,
+            recent=recall.recent,
+            relevant=recall.relevant,
+            formatted=memory_context,
         )
 
         answer = chain.invoke({
@@ -105,7 +105,7 @@ def chat(request: ChatRequest):
     return ChatResponse(answer=answer)
 
 
-@app.post("/reload-prompts")
+@app.get("/reload-prompts")
 def reload_prompts():
     """Hot-reload prompts + params from GCS / local file and rebuild the chain."""
     global chain
@@ -139,18 +139,6 @@ async def telegram_webhook(request: Request):
     payload = await request.json()
     await tg.process_update(payload)
     return {"ok": True}
-
-
-@app.post("/telegram/set-webhook")
-async def telegram_set_webhook(request: Request):
-    """Manually register the Telegram webhook. Body: {"url": "https://..."}"""
-    body = await request.json()
-    base_url = body.get("url", "").rstrip("/")
-    if not base_url:
-        return {"error": "provide 'url' in the request body"}
-    result = await tg.register_webhook(base_url)
-    return result
-
 
 @app.get("/telegram/status")
 async def telegram_status():

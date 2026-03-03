@@ -15,6 +15,18 @@ from app.crypto import TOOLS as CRYPTO_TOOLS, execute_tool as execute_crypto_too
 _MAX_TOOL_ROUNDS = 3
 
 
+def _extract_usage(resp) -> dict | None:
+    """Pull token counts from the OpenAI response object (None if unavailable)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return None
+    return {
+        "prompt_tokens": getattr(u, "prompt_tokens", None),
+        "completion_tokens": getattr(u, "completion_tokens", None),
+        "total_tokens": getattr(u, "total_tokens", None),
+    }
+
+
 def format_docs(docs):
     """Format retrieved Documents into a single string with source citations."""
     lines = []
@@ -89,13 +101,15 @@ def build_chain():
             ret_error = str(exc)
         ret_ms = int((time.monotonic() - t0) * 1000)
 
-        sources = [d.metadata.get("source", "unknown") for d in docs]
         if trace:
             trace.record_retrieval(
                 query=question,
-                doc_count=len(docs),
+                documents=[
+                    {"source": d.metadata.get("source", "unknown"),
+                     "content": d.page_content}
+                    for d in docs
+                ],
                 context_length=len(context),
-                sources=sources,
                 duration_ms=ret_ms,
                 error=ret_error,
             )
@@ -130,13 +144,15 @@ def build_chain():
                 answer = msg.content or ""
                 llm_ms = int((time.monotonic() - llm_t0) * 1000)
                 if trace:
+                    usage = _extract_usage(resp)
                     trace.record_llm(
                         model=settings.poe_bot_name,
-                        messages_sent=len(messages),
+                        messages=messages,
                         temperature=temperature,
-                        answer_length=len(answer),
+                        response=answer,
                         rounds=rounds,
                         duration_ms=llm_ms,
+                        usage=usage,
                     )
                 return answer
 
@@ -158,13 +174,15 @@ def build_chain():
         answer = msg.content or ""
         llm_ms = int((time.monotonic() - llm_t0) * 1000)
         if trace:
+            usage = _extract_usage(resp)
             trace.record_llm(
                 model=settings.poe_bot_name,
-                messages_sent=len(messages),
+                messages=messages,
                 temperature=temperature,
-                answer_length=len(answer),
+                response=answer,
                 rounds=rounds,
                 duration_ms=llm_ms,
+                usage=usage,
             )
         return answer
 

@@ -3,6 +3,10 @@
 Each RAG pipeline execution is recorded as a single document in the
 ``rag_traces`` collection.  Writes happen in a background thread so
 they never add latency to the user response.
+
+Full payloads (memory text, retrieved docs, LLM messages, token counts)
+are captured so every pipeline step can be inspected after the fact.
+A per-field truncation limit keeps each Firestore document under 1 MB.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from app.settings import settings
 logger = logging.getLogger(__name__)
 
 _COLLECTION = f"{settings.firestore_prefix}rag_traces"
+_MAX_STR = 3000
 
 
 def _init_firestore():
@@ -49,6 +54,34 @@ def _now():
     return datetime.now(timezone.utc)
 
 
+def _trunc(text: str, limit: int = _MAX_STR) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"...[truncated, total {len(text)} chars]"
+
+
+def _trunc_messages(messages: list, limit: int = _MAX_STR) -> list[dict]:
+    """Serialize a message list, truncating each content field."""
+    out: list[dict] = []
+    for m in messages:
+        if isinstance(m, dict):
+            entry = {k: v for k, v in m.items()}
+            if "content" in entry and isinstance(entry["content"], str):
+                entry["content"] = _trunc(entry["content"], limit)
+        else:
+            entry: dict[str, Any] = {
+                "role": getattr(m, "role", "unknown"),
+                "content": _trunc(getattr(m, "content", "") or "", limit),
+            }
+            if hasattr(m, "tool_calls") and m.tool_calls:
+                entry["tool_calls"] = [
+                    {"name": tc.function.name, "arguments": tc.function.arguments}
+                    for tc in m.tool_calls
+                ]
+        out.append(entry)
+    return out
+
+
 class Trace:
     """Collects timing and payload data for one RAG pipeline execution."""
 
@@ -67,55 +100,81 @@ class Trace:
         self.status: str = "ok"
         self.error: str | None = None
 
+    # ── Memory ──────────────────────────────────────────────────────
+
     def record_memory(
         self,
-        summary_length: int,
-        recent_count: int,
-        relevant_count: int,
-        formatted_length: int,
+        summary: str,
+        recent: list[dict],
+        relevant: list[dict],
+        formatted: str,
     ) -> None:
         self.memory_data = {
-            "summary_length": summary_length,
-            "recent_count": recent_count,
-            "relevant_count": relevant_count,
-            "formatted_length": formatted_length,
+            "summary": _trunc(summary),
+            "recent": [
+                {"role": m.get("role", "?"), "content": _trunc(m.get("content", ""))}
+                for m in recent
+            ],
+            "relevant": [
+                {"content": _trunc(m.get("content", ""))} for m in relevant
+            ],
+            "formatted_length": len(formatted),
+            "summary_length": len(summary),
+            "recent_count": len(recent),
+            "relevant_count": len(relevant),
         }
+
+    # ── Retrieval ───────────────────────────────────────────────────
 
     def record_retrieval(
         self,
         query: str,
-        doc_count: int,
+        documents: list[dict],
         context_length: int,
-        sources: list[str],
         duration_ms: int,
         error: str | None = None,
     ) -> None:
         self.retrieval_data = {
             "query": query,
-            "doc_count": doc_count,
+            "doc_count": len(documents),
+            "documents": [
+                {
+                    "source": d.get("source", "unknown"),
+                    "content": _trunc(d.get("content", "")),
+                }
+                for d in documents
+            ],
             "context_length": context_length,
-            "sources": sources,
             "duration_ms": duration_ms,
             "error": error,
         }
 
+    # ── LLM ─────────────────────────────────────────────────────────
+
     def record_llm(
         self,
         model: str,
-        messages_sent: int,
+        messages: list,
         temperature: float,
-        answer_length: int,
+        response: str,
         rounds: int,
         duration_ms: int,
+        usage: dict | None = None,
     ) -> None:
         self.llm_data = {
             "model": model,
-            "messages_sent": messages_sent,
             "temperature": temperature,
-            "answer_length": answer_length,
+            "messages_sent": len(messages),
+            "messages": _trunc_messages(messages),
+            "response": _trunc(response),
+            "answer_length": len(response),
+            "word_count": len(response.split()),
             "rounds": rounds,
             "duration_ms": duration_ms,
+            "usage": usage,
         }
+
+    # ── Tools ───────────────────────────────────────────────────────
 
     def record_tool(
         self,
@@ -127,9 +186,11 @@ class Trace:
         self.tool_calls.append({
             "name": name,
             "arguments": arguments,
-            "result": result,
+            "result": _trunc(result),
             "duration_ms": duration_ms,
         })
+
+    # ── Finish & write ──────────────────────────────────────────────
 
     def finish(self, answer: str, error: str | None = None) -> None:
         self.answer = answer
@@ -144,7 +205,7 @@ class Trace:
             "trace_id": self.trace_id,
             "user_id": self.user_id,
             "question": self.question,
-            "answer": self.answer,
+            "answer": _trunc(self.answer),
             "timestamp": self.timestamp,
             "duration_ms": duration_ms,
             "status": self.status,

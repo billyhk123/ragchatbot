@@ -9,5 +9,14 @@ steps:
       - gcr.io/$PROJECT_ID/ragchatbot:$COMMIT_SHA
       - .
 
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ragchatbot
+      - --image=gcr.io/$PROJECT_ID/ragchatbot:$COMMIT_SHA
+      - --region=asia-east2
+
 images:
   - gcr.io/$PROJECT_ID/ragchatbot:$COMMIT_SHA
