@@ -46,7 +46,12 @@ _DEFAULTS = {
 }
 
 
+_load_source: str = "defaults"
+_load_error: str | None = None
+
+
 def _load_from_gcs() -> dict | None:
+    global _load_source, _load_error
     if not GCS_PROMPTS_BUCKET:
         return None
     try:
@@ -55,35 +60,41 @@ def _load_from_gcs() -> dict | None:
         client = GCSClient()
         blob = client.bucket(GCS_PROMPTS_BUCKET).blob(GCS_PROMPTS_FILE)
         if not blob.exists():
-            print(f"[Prompts] GCS file gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE} not found")
+            _load_error = f"GCS file gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE} not found"
             return None
         raw = blob.download_as_text()
         data = yaml.safe_load(raw)
-        print(f"[Prompts] Loaded from gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE}")
+        _load_source = f"gcs: gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE}"
+        _load_error = None
         return data
     except Exception as e:
-        print(f"[Prompts] GCS load failed: {e}")
+        _load_error = f"GCS load failed: {e}"
         return None
 
 
 def _load_from_local() -> dict | None:
+    global _load_source, _load_error
     if not LOCAL_PROMPTS_PATH.exists():
         return None
     try:
         data = yaml.safe_load(LOCAL_PROMPTS_PATH.read_text(encoding="utf-8"))
-        print(f"[Prompts] Loaded from {LOCAL_PROMPTS_PATH}")
+        _load_source = f"local: {LOCAL_PROMPTS_PATH}"
+        _load_error = None
         return data
     except Exception as e:
-        print(f"[Prompts] Local file load failed: {e}")
+        _load_error = f"Local load failed: {e}"
         return None
 
 
 def _build(data: dict | None) -> dict:
+    global _load_source
     cfg = {k: dict(v) for k, v in _DEFAULTS.items()}
     if data:
         for key in ("rag", "summary", "llm"):
             if key in data and isinstance(data[key], dict):
                 cfg[key] = {**cfg[key], **data[key]}
+    else:
+        _load_source = "defaults"
     return cfg
 
 
@@ -114,9 +125,13 @@ RAG_PROMPT = build_rag_prompt(_cfg)
 SUMMARY_PROMPT = build_summary_prompt(_cfg)
 
 
-def reload():
-    """Reload prompts from GCS/local at runtime."""
-    global RAG_PROMPT, SUMMARY_PROMPT, _cfg
+def reload() -> dict:
+    """Reload prompts from GCS/local at runtime.
+
+    Returns the loaded config dict.  After calling this, inspect
+    ``_load_source`` and ``_load_error`` for diagnostics.
+    """
+    global _cfg, RAG_PROMPT, SUMMARY_PROMPT
     _cfg = load_prompts()
     RAG_PROMPT = build_rag_prompt(_cfg)
     SUMMARY_PROMPT = build_summary_prompt(_cfg)

@@ -113,10 +113,11 @@ def reload_prompts():
     chain = build_chain()
     return {
         "status": "reloaded",
-        "rag_k": cfg["rag"].get("k"),
-        "llm_temperature": cfg["llm"].get("temperature"),
-        "llm_max_tokens": cfg["llm"].get("max_tokens"),
-        "rag_system_preview": cfg["rag"]["system"][:120] + "...",
+        "source": prompts._load_source,
+        "error": prompts._load_error,
+        "rag": cfg["rag"],
+        "summary": cfg["summary"],
+        "llm": cfg["llm"],
     }
 
 
