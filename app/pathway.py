@@ -49,6 +49,12 @@ def _save_state(state: dict) -> None:
 
 
 def _sync_gcs_once() -> None:
+    """Download new/changed files from GCS bucket to local directory.
+
+    Uses blob generation IDs to skip files that haven't changed since
+    the last sync.  Optionally deletes local files removed from GCS
+    when SYNC_DELETE is enabled.
+    """
     client = storage.Client()
     bucket = client.bucket(GCS_BUCKET)
 
@@ -62,6 +68,7 @@ def _sync_gcs_once() -> None:
             continue
 
         seen.add(name)
+        # Skip download if blob generation hasn't changed (same version)
         generation = str(blob.generation or "")
         if state.get(name) == generation and (LOCAL_DIR / name).exists():
             continue
@@ -71,6 +78,7 @@ def _sync_gcs_once() -> None:
         blob.download_to_filename(str(target))
         state[name] = generation
 
+    # Remove local files that no longer exist in GCS
     if SYNC_DELETE:
         local_files = [
             p for p in LOCAL_DIR.rglob("*") if p.is_file() and p.name != STATE_FILE.name
