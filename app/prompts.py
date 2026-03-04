@@ -50,60 +50,63 @@ _load_source: str = "defaults"
 _load_error: str | None = None
 
 
-def _load_from_gcs() -> dict | None:
-    global _load_source, _load_error
+def _load_from_gcs() -> tuple[dict | None, str | None]:
+    """Try loading from GCS. Returns (data, error)."""
     if not GCS_PROMPTS_BUCKET:
-        return None
+        return None, "GCS_PROMPTS_BUCKET env var is empty"
     try:
         from google.cloud.storage import Client as GCSClient
 
         client = GCSClient()
         blob = client.bucket(GCS_PROMPTS_BUCKET).blob(GCS_PROMPTS_FILE)
         if not blob.exists():
-            _load_error = f"GCS file gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE} not found"
-            return None
+            return None, f"GCS file gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE} not found"
         raw = blob.download_as_text()
         data = yaml.safe_load(raw)
-        _load_source = f"gcs: gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE}"
-        _load_error = None
-        return data
+        return data, None
     except Exception as e:
-        _load_error = f"GCS load failed: {e}"
-        return None
+        return None, f"GCS load failed: {e}"
 
 
-def _load_from_local() -> dict | None:
-    global _load_source, _load_error
+def _load_from_local() -> tuple[dict | None, str | None]:
+    """Try loading from local file. Returns (data, error)."""
     if not LOCAL_PROMPTS_PATH.exists():
-        return None
+        return None, f"Local file {LOCAL_PROMPTS_PATH} not found"
     try:
         data = yaml.safe_load(LOCAL_PROMPTS_PATH.read_text(encoding="utf-8"))
-        _load_source = f"local: {LOCAL_PROMPTS_PATH}"
-        _load_error = None
-        return data
+        return data, None
     except Exception as e:
-        _load_error = f"Local load failed: {e}"
-        return None
+        return None, f"Local load failed: {e}"
 
 
 def _build(data: dict | None) -> dict:
-    global _load_source
     cfg = {k: dict(v) for k, v in _DEFAULTS.items()}
     if data:
         for key in ("rag", "summary", "llm"):
             if key in data and isinstance(data[key], dict):
                 cfg[key] = {**cfg[key], **data[key]}
-    else:
-        _load_source = "defaults"
     return cfg
 
 
 def load_prompts() -> dict:
     """Try GCS first, then local file, then hardcoded defaults."""
-    data = _load_from_gcs()
-    if data is None:
-        data = _load_from_local()
-    return _build(data)
+    global _load_source, _load_error
+
+    gcs_data, gcs_error = _load_from_gcs()
+    if gcs_data is not None:
+        _load_source = f"gcs: gs://{GCS_PROMPTS_BUCKET}/{GCS_PROMPTS_FILE}"
+        _load_error = None
+        return _build(gcs_data)
+
+    local_data, local_error = _load_from_local()
+    if local_data is not None:
+        _load_source = f"local: {LOCAL_PROMPTS_PATH}"
+        _load_error = gcs_error
+        return _build(local_data)
+
+    _load_source = "defaults"
+    _load_error = gcs_error or local_error
+    return _build(None)
 
 
 def build_rag_prompt(cfg: dict) -> ChatPromptTemplate:
