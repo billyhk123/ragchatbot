@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Retrieval Test</title>
+    <style>
+      :root {
+        --wa-green: #25d366;
+        --wa-dark: #075e54;
+        --wa-bg: #e5ddd5;
+        --text: #111;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: var(--wa-bg);
+        color: var(--text);
+      }
+      .header {
+        background: var(--wa-dark);
+        color: #fff;
+        padding: 12px 16px;
+        font-weight: bold;
+      }
+      .container {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+      .card {
+        background: #f0f0f0;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      input[type="text"], input[type="number"] {
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      input[type="text"] { flex: 1; }
+      input[type="number"] { width: 70px; }
+      button {
+        background: var(--wa-green);
+        color: #fff;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+        white-space: nowrap;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .meta {
+        font-size: 13px;
+        color: #555;
+        margin-bottom: 10px;
+      }
+      .doc-card {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 10px;
+      }
+      .doc-rank {
+        font-weight: bold;
+        color: var(--wa-dark);
+        margin-bottom: 4px;
+      }
+      .doc-source {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 6px;
+      }
+      .doc-content {
+        white-space: pre-wrap;
+        font-size: 13px;
+        line-height: 1.5;
+        max-height: 200px;
+        overflow-y: auto;
+        background: #fafafa;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #eee;
+      }
+      .doc-meta {
+        font-size: 11px;
+        color: #999;
+        margin-top: 6px;
+      }
+      .error {
+        color: #c00;
+        font-weight: bold;
+      }
+      #results { min-height: 100px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">Retrieval Test</div>
+    <div class="container">
+      <div class="card">
+        <div class="row">
+          <input id="query" type="text" placeholder="Enter query to test retrieval...">
+          <label for="k">k:</label>
+          <input id="k" type="number" value="4" min="1" max="20">
+          <button id="search">Search</button>
+        </div>
+      </div>
+      <div id="results"></div>
+    </div>
+
+    <script>
+      const queryEl = document.getElementById("query");
+      const kEl = document.getElementById("k");
+      const searchBtn = document.getElementById("search");
+      const resultsEl = document.getElementById("results");
+
+      function escapeHtml(text) {
+        const d = document.createElement("div");
+        d.textContent = text;
+        return d.innerHTML;
+      }
+
+      async function doSearch() {
+        const q = queryEl.value.trim();
+        if (!q) return;
+
+        searchBtn.disabled = true;
+        resultsEl.innerHTML = '<div class="card meta">Searching...</div>';
+
+        const k = parseInt(kEl.value) || 4;
+        const url = `/retrieval-test?q=${encodeURIComponent(q)}&k=${k}`;
+
+        try {
+          const resp = await fetch(url);
+          const data = await resp.json();
+
+          if (data.error) {
+            resultsEl.innerHTML = `<div class="card error">${escapeHtml(data.error)}</div>`;
+            return;
+          }
+
+          let html = `<div class="card meta">
+            Query: <strong>${escapeHtml(data.query)}</strong> |
+            Returned: <strong>${data.returned}</strong> docs |
+            Time: <strong>${data.elapsed_ms} ms</strong>
+          </div>`;
+
+          if (data.documents.length === 0) {
+            html += '<div class="card">No documents found.</div>';
+          }
+
+          for (const doc of data.documents) {
+            const metaStr = Object.keys(doc.metadata).length > 0
+              ? Object.entries(doc.metadata).map(([k,v]) => `${k}: ${v}`).join(" | ")
+              : "";
+            html += `<div class="doc-card">
+              <div class="doc-rank">#${doc.rank}</div>
+              <div class="doc-source">Source: ${escapeHtml(doc.source)} | ${doc.length} chars</div>
+              <div class="doc-content">${escapeHtml(doc.content)}</div>
+              ${metaStr ? `<div class="doc-meta">${escapeHtml(metaStr)}</div>` : ""}
+            </div>`;
+          }
+
+          resultsEl.innerHTML = html;
+        } catch (err) {
+          resultsEl.innerHTML = `<div class="card error">Error: ${escapeHtml(String(err))}</div>`;
+        } finally {
+          searchBtn.disabled = false;
+        }
+      }
+
+      searchBtn.addEventListener("click", doSearch);
+      queryEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doSearch();
+      });
+    </script>
+  </body>
+</html>

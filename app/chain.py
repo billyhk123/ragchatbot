@@ -66,6 +66,11 @@ _retriever = None
 _last_k = None
 
 
+def get_retriever():
+    """Return the current retriever instance (built lazily by build_chain)."""
+    return _retriever
+
+
 def build_chain():
     """Build (or rebuild) the RAG chain with tool-calling support.
 

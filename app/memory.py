@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional
 
@@ -41,11 +40,11 @@ def _format_messages(messages: Iterable[dict]) -> str:
     return "\n".join(lines).strip()
 
 
-@dataclass
 class MemoryRecall:
-    summary: str
-    recent: List[dict]
-    relevant: List[dict]
+    def __init__(self, summary: str, recent: List[dict], relevant: List[dict]):
+        self.summary = summary
+        self.recent = recent
+        self.relevant = relevant
 
 
 class ChatMemory:

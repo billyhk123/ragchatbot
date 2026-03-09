@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from app.chain import build_chain
+from app.chain import build_chain, get_retriever
 from app.memory import ChatMemory
 from app.pathway import main as pathway_main
 from app.tracing import Trace, recent_traces
@@ -119,6 +119,48 @@ def reload_prompts():
         "summary": cfg["summary"],
         "llm": cfg["llm"],
     }
+
+
+# ── Retrieval test ────────────────────────────────────────────────────
+
+@app.get("/retrieval-test")
+def retrieval_test(q: str, k: int = 4):
+    """Return raw retrieval results for a query — no LLM involved."""
+    import time
+    retriever = get_retriever()
+    if retriever is None:
+        return {"error": "Retriever not initialised yet"}
+
+    t0 = time.monotonic()
+    try:
+        docs = retriever.invoke(q)
+    except Exception as exc:
+        return {"error": str(exc), "documents": []}
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+    results = []
+    for i, d in enumerate(docs[:k]):
+        results.append({
+            "rank": i + 1,
+            "source": d.metadata.get("source", "unknown"),
+            "metadata": {k: v for k, v in d.metadata.items() if k != "source"},
+            "content": d.page_content,
+            "length": len(d.page_content),
+        })
+    return {
+        "query": q,
+        "k": k,
+        "returned": len(results),
+        "elapsed_ms": elapsed_ms,
+        "documents": results,
+    }
+
+
+@app.get("/retrieval-test-ui", response_class=HTMLResponse)
+def retrieval_test_ui():
+    ui_path = Path(__file__).with_name("retrieval_test.html")
+    html = ui_path.read_text(encoding="utf-8")
+    return HTMLResponse(content=html)
 
 
 # ── Traces ───────────────────────────────────────────────────────────
