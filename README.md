@@ -6,9 +6,9 @@ with a Telegram bot integration and can also be used as a simple HTTP service.
 
 ## Features
 
-- RAG pipeline built with LangChain + FAISS vector store
-- Document ingestion from `data/raw/`
+- RAG pipeline built with LangChain + Pathway and FAISS vector store
+- Document ingestion from `data/raw/` and retrieve from Google cloud bucket periodically
 - Telegram bot with webhook endpoint (`/telegram/webhook`)
-- Web chat UI at `/chat-ui`
+- Tool Calling to check Cryto price (pending to add more tools)
 - Cloud Run ready via Docker
 
