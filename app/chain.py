@@ -1,30 +1,18 @@
-import json
 import time
 
 import requests as _requests
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 
 from app.settings import settings
 import app.prompts as prompts
-from app.llm_poe import get_client
-from app.crypto import TOOLS as CRYPTO_TOOLS, execute_tool as execute_crypto_tool
+from app.llm_poe import get_llm
+from app.crypto import LANGCHAIN_TOOLS, execute_tool as execute_crypto_tool
 
 _MAX_TOOL_ROUNDS = 3
-
-
-def _extract_usage(resp) -> dict | None:
-    """Pull token counts from the OpenAI response object (None if unavailable)."""
-    u = getattr(resp, "usage", None)
-    if u is None:
-        return None
-    return {
-        "prompt_tokens": getattr(u, "prompt_tokens", None),
-        "completion_tokens": getattr(u, "completion_tokens", None),
-        "total_tokens": getattr(u, "total_tokens", None),
-    }
 
 
 def format_docs(docs):
@@ -82,8 +70,6 @@ def build_chain():
 
     cfg = prompts._cfg
     k = int(cfg.get("rag", {}).get("k", 4))
-    temperature = float(cfg.get("llm", {}).get("temperature", settings.temperature))
-    max_tokens = int(cfg.get("llm", {}).get("max_tokens", settings.max_tokens))
 
     if _retriever is None or _last_k != k:
         _retriever = _build_retriever(k)
@@ -93,6 +79,10 @@ def build_chain():
         question = inputs["question"]
         memory = inputs.get("memory", "")
         trace = inputs.get("trace")
+
+        live_cfg = prompts._cfg
+        temperature = float(live_cfg.get("llm", {}).get("temperature", settings.temperature))
+        max_tokens = int(live_cfg.get("llm", {}).get("max_tokens", settings.max_tokens))
 
         # --- 1. Retrieve context (non-fatal) ---
         t0 = time.monotonic()
@@ -120,39 +110,37 @@ def build_chain():
             )
 
         # --- 2. Build messages ---
-        system_text = cfg["rag"]["system"]
-        human_text = cfg["rag"]["human"].format(
+        system_text = live_cfg["rag"]["system"]
+        human_text = live_cfg["rag"]["human"].format(
             question=question, memory=memory, context=context,
         )
-        messages: list[dict] = [
-            {"role": "system", "content": system_text},
-            {"role": "user", "content": human_text},
+        messages = [
+            SystemMessage(content=system_text),
+            HumanMessage(content=human_text),
         ]
 
         # --- 3. LLM call with tool loop ---
-        client = get_client()
+        llm = get_llm(temperature=temperature, max_tokens=max_tokens)
+        llm_with_tools = llm.bind_tools(LANGCHAIN_TOOLS, tool_choice="auto")
+
         llm_t0 = time.monotonic()
         rounds = 0
         for _round in range(_MAX_TOOL_ROUNDS):
             rounds = _round + 1
-            resp = client.chat.completions.create(
-                model=settings.poe_bot_name,
-                messages=messages,
-                tools=CRYPTO_TOOLS,
-                tool_choice="auto",
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            msg = resp.choices[0].message
+            ai_msg = llm_with_tools.invoke(messages)
+            messages.append(ai_msg)
 
-            if not msg.tool_calls:
-                answer = msg.content or ""
+            if not ai_msg.tool_calls:
+                answer = ai_msg.content or ""
                 llm_ms = int((time.monotonic() - llm_t0) * 1000)
+                usage = _extract_usage(ai_msg)
                 if trace:
-                    usage = _extract_usage(resp)
                     trace.record_llm(
                         model=settings.poe_bot_name,
-                        messages=messages,
+                        messages=[
+                            {"role": "system", "content": system_text},
+                            {"role": "user", "content": human_text},
+                        ],
                         temperature=temperature,
                         response=answer,
                         rounds=rounds,
@@ -161,28 +149,29 @@ def build_chain():
                     )
                 return answer
 
-            messages.append(msg)
-            for tc in msg.tool_calls:
+            for tc in ai_msg.tool_calls:
                 tool_t0 = time.monotonic()
-                args = json.loads(tc.function.arguments)
-                result = execute_crypto_tool(tc.function.name, args)
+                result = execute_crypto_tool(tc["name"], tc["args"])
                 tool_ms = int((time.monotonic() - tool_t0) * 1000)
-                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+                messages.append(ToolMessage(content=result, tool_call_id=tc["id"]))
                 if trace:
                     trace.record_tool(
-                        name=tc.function.name,
-                        arguments=args,
+                        name=tc["name"],
+                        arguments=tc["args"],
                         result=result,
                         duration_ms=tool_ms,
                     )
 
-        answer = msg.content or ""
+        answer = ai_msg.content or ""
         llm_ms = int((time.monotonic() - llm_t0) * 1000)
+        usage = _extract_usage(ai_msg)
         if trace:
-            usage = _extract_usage(resp)
             trace.record_llm(
                 model=settings.poe_bot_name,
-                messages=messages,
+                messages=[
+                    {"role": "system", "content": system_text},
+                    {"role": "user", "content": human_text},
+                ],
                 temperature=temperature,
                 response=answer,
                 rounds=rounds,
@@ -192,3 +181,15 @@ def build_chain():
         return answer
 
     return RunnableLambda(_invoke)
+
+
+def _extract_usage(ai_msg) -> dict | None:
+    """Pull token counts from LangChain's AIMessage.usage_metadata."""
+    meta = getattr(ai_msg, "usage_metadata", None)
+    if not meta:
+        return None
+    return {
+        "prompt_tokens": meta.get("input_tokens"),
+        "completion_tokens": meta.get("output_tokens"),
+        "total_tokens": meta.get("total_tokens"),
+    }

@@ -1,6 +1,5 @@
 """CoinMarketCap price lookup + OpenAI tool schema."""
 
-import json
 import logging
 import os
 
@@ -89,3 +88,21 @@ def execute_tool(name: str, arguments: dict) -> str:
             return format_price(info)
         return f"Could not fetch price for '{slug}'."
     return f"Unknown tool: {name}"
+
+
+# ---------------------------------------------------------------------------
+# LangChain tool wrappers (used by bind_tools / AgentExecutor)
+# ---------------------------------------------------------------------------
+from langchain_core.tools import tool as _lc_tool
+
+
+@_lc_tool
+def check_crypto_price(coin_name: str) -> str:
+    """Look up the current USD price of a cryptocurrency by its slug name."""
+    info = get_price(coin_name)
+    if info:
+        return format_price(info)
+    return f"Could not fetch price for '{coin_name}'."
+
+
+LANGCHAIN_TOOLS = [check_crypto_price]

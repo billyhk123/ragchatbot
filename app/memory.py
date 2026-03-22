@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Iterable, List, Optional
+from typing import Iterable, List
 
 import faiss
 import firebase_admin
 import numpy as np
 from firebase_admin import firestore
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import StrOutputParser
-
-from app.llm_poe import PoeChatModel
+from app.llm_poe import get_llm
 from app.prompts import SUMMARY_PROMPT
 from app.settings import settings
 
@@ -53,7 +50,7 @@ class ChatMemory:
     def __init__(self):
         self.client = _init_firestore()
         self.embeddings = HuggingFaceEmbeddings(model_name=settings.embedding_model)
-        self.llm = PoeChatModel()
+        self.llm = get_llm()
         self.window_turns = settings.memory_window_turns
         self.recall_k = settings.memory_recall_k
         self.vector_limit = settings.memory_vector_limit
@@ -164,8 +161,8 @@ class ChatMemory:
 
     def _summarize(self, summary: str, lines: str) -> str:
         prompt = SUMMARY_PROMPT.format_prompt(summary=summary, lines=lines)
-        result = self.llm._generate(prompt.to_messages())
-        return result.generations[0].message.content.strip()
+        result = self.llm.invoke(prompt.to_messages())
+        return result.content.strip()
 
     def update_after_turn(self, user_id: str, user_text: str, assistant_text: str) -> None:
         """Store the turn and summarize older messages when the window overflows."""
