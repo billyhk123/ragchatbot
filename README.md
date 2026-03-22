@@ -99,51 +99,6 @@ ragchatbot/
 
 ---
 
-## How to Run
-
-### Local development
-
-```bash
-# 1. Install dependencies
-pip install -e .
-
-# 2. Set environment variables (or create .env)
-export POE_API_KEY=your_poe_api_key
-export TELEGRAM_BOT_TOKEN=your_bot_token
-export COINMARKETCAP_API_KEY=your_cmc_key
-export FIREBASE_PROJECT_ID=your_project_id
-
-# 3. Ingest documents (optional, if using local FAISS)
-python -m ingest.ingest
-
-# 4. Start the server
-uvicorn server.server:app --reload --port 8080
-```
-
-Then open:
-- Web chat: `http://localhost:8080/chat-ui`
-- Retrieval test: `http://localhost:8080/retrieval-test-ui`
-- API: `POST http://localhost:8080/chat` with `{"question": "...", "user_id": "..."}`
-
-### Deploy to Cloud Run
-
-```bash
-# Build and push
-gcloud builds submit --config cloudbuild.yaml
-
-# Or manually
-docker build -t gcr.io/$PROJECT_ID/ragchatbot .
-docker push gcr.io/$PROJECT_ID/ragchatbot
-gcloud run deploy ragchatbot \
-  --image gcr.io/$PROJECT_ID/ragchatbot \
-  --region asia-east2
-```
-
-Set secrets (POE_API_KEY, TELEGRAM_BOT_TOKEN, etc.) in the Cloud Run console
-or via `cloudrun.yaml`.
-
----
-
 ## Pathway Retriever (Optional)
 
 Pathway runs as an in-process thread that syncs documents from GCS and serves
