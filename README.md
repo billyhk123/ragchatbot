@@ -48,23 +48,6 @@ flowchart TB
 
 ---
 
-## Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.11, FastAPI, Uvicorn |
-| LLM | Poe OpenAI-compatible API (`langchain-openai` ChatOpenAI) |
-| RAG retrieval | Pathway (live GCS sync) or FAISS (local) |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
-| Memory | Firestore (sessions, messages, vector recall) |
-| Tool calling | OpenAI function-calling protocol (CoinMarketCap) |
-| Tracing | Custom Firestore-backed request tracing |
-| Bot | python-telegram-bot (webhook mode) |
-| Deployment | Docker, Cloud Build, Google Cloud Run |
-| Config | Hot-reloadable `prompts.yaml` from GCS |
-
----
-
 ## Key Features
 
 - **RAG pipeline** — retrieves relevant documents from Pathway/FAISS, injects
@@ -179,39 +162,6 @@ GCS_BUCKET=ragchatbot-raw
 Pathway starts automatically with the server and periodically syncs new or
 changed files from the bucket.
 
----
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/chat` | Send a question, get an answer |
-| GET | `/chat-ui` | Web chat interface |
-| GET | `/health` | Health check |
-| GET | `/reload-prompts` | Hot-reload prompts from GCS |
-| GET | `/retrieval-test?q=...&k=4` | Test retrieval quality (JSON) |
-| GET | `/retrieval-test-ui` | Retrieval test page |
-| GET | `/traces?limit=20` | View recent pipeline traces |
-| POST | `/telegram/webhook` | Telegram bot webhook |
-| GET | `/telegram/status` | Webhook status |
+--
 
 ---
-
-## What I Learned
-
-- **RAG architecture** — how to combine document retrieval with LLM generation,
-  managing the tradeoff between context relevance and token budget.
-- **Tool calling protocol** — implementing the OpenAI function-calling loop
-  (schema definition, multi-round execution, tool message routing) through
-  Poe's OpenAI-compatible API.
-- **Conversation memory design** — rolling summarization for long-term context,
-  sliding window for recency, and FAISS vector search for relevance-based
-  recall, all backed by Firestore.
-- **LangChain in practice** — when framework abstractions help (ChatOpenAI,
-  bind_tools, embeddings) vs when direct API calls are simpler (manual tool
-  loop for better observability).
-- **Cloud deployment** — Docker multi-stage builds, Cloud Build CI/CD pipeline,
-  Cloud Run configuration, and the subtleties of image push ordering in
-  `cloudbuild.yaml`.
-- **Hot configuration** — loading prompts from GCS at runtime so prompt tuning
-  doesn't require redeployment.
